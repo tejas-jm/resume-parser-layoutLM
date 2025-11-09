@@ -1,103 +1,165 @@
-# LayoutLMv3 Resume Parser
+# Resume Parser Pipeline (LayoutLMv3)
 
-An end-to-end resume parsing pipeline that ingests DOCX/DOC/PDF (including scanned PDFs), runs LayoutLMv3 for contextual embeddings, and maps the content into a structured JSON schema.
+## Overview
+This project implements a layout-aware resume parsing pipeline built on **LayoutLMv3** (without fine-tuning).  
+It supports multiple input file types—**DOCX**, **DOC**, and **PDF** (including scanned resumes)—and outputs a structured JSON containing contact details, education, work experience, skills, and other relevant sections.
+
+The current version includes:
+1. Ingestion and layout extraction  
+2. Multi-column layout handling  
+3. LayoutLMv3 inference  
+4. Post-processing and heuristic structuring  
+
+A future enhancement (Step 5) will introduce **Small Language Model (SLM)**–based JSON refinement and schema validation.
+
+---
 
 ## Features
-- File-type detection with dedicated ingestion paths for DOC/DOCX (python-docx/docx2txt) and PDF (pdfplumber with OCR fallback).
-- Normalization of word-level bounding boxes for LayoutLMv3 compatibility.
-- LayoutLMv3 inference without fine-tuning for contextual embeddings and downstream heuristics.
-- Heuristic post-processing for section segmentation, date normalization, and skill deduplication.
-- JSON output schema covering contact information, education, work experience, skills, certifications, projects, publications, languages, and other sections.
-- Notebook and CLI examples for running the pipeline end-to-end.
+- Works with DOCX, DOC, and PDF (both text and scanned)  
+- Extracts text, bounding boxes, and page-level metadata  
+- Detects and handles multi-column resume layouts  
+- Uses LayoutLMv3 for layout-aware text understanding  
+- Converts model output into structured, interpretable JSON  
+- Modular and extendable architecture for future improvements  
+
+---
+
+## Architecture
+
+```
+File (DOC / DOCX / PDF)
+       ↓
+Ingestion & OCR
+       ↓
+Layout Normalization (Column Detection)
+       ↓
+LayoutLMv3 Inference
+       ↓
+Heuristic Section Extraction
+       ↓
+Structured Resume JSON
+```
+
+---
 
 ## Installation
 
 ```bash
-pip install -r requirements.txt  # create this file based on your environment
+git clone https://github.com/your-username/studious-funicular.git
+cd studious-funicular
+pip install -r requirements.txt
 ```
 
-Ensure optional dependencies for OCR are installed when processing scanned PDFs:
+### Required Libraries
+- `transformers`
+- `torch`
+- `pdfplumber`
+- `python-docx`
+- `docx2txt`
+- `easyocr` or `pytesseract`
+- `Pillow`
 
-```bash
-pip install easyocr pdf2image
-sudo apt-get install poppler-utils  # required by pdf2image
-```
+---
 
 ## Usage
 
-### Python API
-
 ```python
-from resume_parser import parse_resume
+from pipeline import parse_resume
 
-result = parse_resume("/path/to/resume.pdf")
+result = parse_resume("Sample_Resume.pdf")
 print(result)
 ```
 
-### Command-Line Interface
-
-```bash
-python examples/run_pipeline.py /path/to/resume.pdf --output parsed.json
-```
-
-### Notebook Demo
-
-Open `notebooks/resume_parser_demo.ipynb` (or upload it to Google Colab) and follow the instructions to upload sample resumes and inspect the JSON output.
-
-## JSON Schema
-
-The pipeline produces an object matching the schema below. Optional fields may be omitted when not available, but arrays are always included.
+### Example Output
 
 ```json
 {
   "contact": {
-    "email": "",
-    "phone": "",
-    "website": "",
-    "raw": ""
+    "email": "johndoe@example.com",
+    "phone": "+1-555-234-9876"
   },
   "education": [
     {
-      "institution": "",
-      "degree": "",
-      "field_of_study": "",
-      "start_date": "YYYY-MM",
-      "end_date": "YYYY-MM",
-      "grade": ""
+      "institution": "Greenfield University",
+      "degree": "Bachelor of Computer Science",
+      "start_date": "2017",
+      "end_date": "2021"
     }
   ],
   "work_experience": [
     {
-      "organization": "",
-      "start_date": "YYYY-MM",
-      "end_date": "YYYY-MM",
-      "duration_months": 0,
+      "company": "TechNova Solutions",
+      "position": "Software Engineer",
       "description": [
-        ""
+        "Developed web APIs using Python and Flask",
+        "Implemented CI/CD pipelines and automated test cases"
+      ]
+    },
+    {
+      "company": "ByteWorks Ltd.",
+      "position": "Intern",
+      "description": [
+        "Assisted in frontend development using ReactJS",
+        "Performed data preprocessing for internal analytics tools"
       ]
     }
   ],
-  "skills": [""],
-  "certifications": [
-    {"name": "", "issuer": "", "date": ""}
-  ],
-  "projects": [
-    {"name": "", "description": "", "technologies": []}
-  ],
-  "publications": [
-    {"title": "", "date": "", "link": ""}
-  ],
-  "languages": [""],
-  "other_sections": [
-    {"label": "", "content": ""}
-  ],
-  "meta": {}
+  "skills": ["Python", "React", "SQL", "Data Analysis", "Machine Learning"],
+  "languages": ["English", "Spanish"]
 }
 ```
 
-## Limitations & Future Work
-- The LayoutLMv3 model is used without fine-tuning; expect noisy predictions.
-- DOC ingestion lacks precise layout metadata because DOCX does not expose absolute positions.
-- OCR quality directly affects downstream accuracy for scanned PDFs.
-- Post-processing relies on heuristics; consider integrating learned classifiers or rule-based engines.
-- Future enhancements include custom fine-tuning, richer section detection, and support for multilingual resumes.
+---
+
+## Module Overview
+
+### 1. `ingestion.py`
+- Detects file type (DOCX/DOC/PDF)  
+- Extracts text, bounding boxes, and layout metadata  
+- Performs OCR for scanned PDFs  
+- Normalizes coordinates and removes headers/footers  
+
+### 2. `layout_utils.py`
+- Detects multiple columns per page  
+- Assigns column IDs and sorts tokens by `(page, column, y, x)`  
+
+### 3. `inference.py`
+- Runs pretrained LayoutLMv3 using Hugging Face Transformers  
+- Processes text and bounding boxes (and optional page images)  
+- Generates embeddings or token-level labels  
+
+### 4. `postprocess.py`
+- Groups tokens into lines and sections  
+- Identifies resume headings like “SKILLS,” “EDUCATION,” “EXPERIENCE,” etc.  
+- Extracts entities, normalizes dates, and constructs structured JSON  
+
+---
+
+## Planned Step 5: SLM-Based Refinement
+
+The next phase will integrate a **Small Language Model (SLM)** post-processor to:
+- Clean and re-nest flattened JSON structures  
+- Enforce schema validation  
+- Remove unsupported or hallucinated fields  
+
+This refinement layer will ensure that all outputs strictly follow a unified schema and are ready for downstream applications.
+
+---
+
+## Limitations
+- LayoutLMv3 is used in zero-shot mode (no fine-tuning).  
+- OCR quality impacts accuracy for scanned documents.  
+- Highly irregular or decorative layouts may require further visual segmentation logic.
+
+---
+
+## Future Work
+- Fine-tune LayoutLMv3 on annotated resume datasets.  
+- Integrate `layoutparser` for more accurate region detection.  
+- Add SLM-based refinement for structured JSON validation.  
+- Introduce confidence scoring for extracted fields.
+
+---
+
+## License
+This project is released under the **MIT License**.
